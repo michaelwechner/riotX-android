@@ -31,6 +31,7 @@ Improvements 🙌:
  - Handle code tags (#567)
  - Support spoiler messages
  - Support m.sticker and m.room.join_rules events in timeline
+ - Send mention Pills from composer
 
 Other changes:
  - Markdown set to off by default (#412)
