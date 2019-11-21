@@ -40,7 +40,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.forEach
-import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -320,9 +319,9 @@ class RoomDetailFragment @Inject constructor(
         AlertDialog.Builder(requireActivity())
                 .setTitle(R.string.dialog_title_error)
                 .setMessage(getString(R.string.error_file_too_big,
-                                      error.filename,
-                                      TextUtils.formatFileSize(requireContext(), error.fileSizeInBytes),
-                                      TextUtils.formatFileSize(requireContext(), error.homeServerLimitInBytes)
+                        error.filename,
+                        TextUtils.formatFileSize(requireContext(), error.fileSizeInBytes),
+                        TextUtils.formatFileSize(requireContext(), error.homeServerLimitInBytes)
                 ))
                 .setPositiveButton(R.string.ok, null)
                 .show()
@@ -408,7 +407,7 @@ class RoomDetailFragment @Inject constructor(
         composerLayout.sendButton.setContentDescription(getString(descriptionRes))
 
         avatarRenderer.render(event.senderAvatar, event.root.senderId
-                                                  ?: "", event.getDisambiguatedDisplayName(), composerLayout.composerRelatedMessageAvatar)
+                ?: "", event.getDisambiguatedDisplayName(), composerLayout.composerRelatedMessageAvatar)
         composerLayout.expand {
             // need to do it here also when not using quick reply
             focusComposerAndShowKeyboard()
@@ -422,7 +421,7 @@ class RoomDetailFragment @Inject constructor(
             // Ignore update to avoid saving a draft
             composerLayout.composerEditText.setText(text)
             composerLayout.composerEditText.setSelection(composerLayout.composerEditText.text?.length
-                                                         ?: 0)
+                    ?: 0)
         }
     }
 
@@ -445,9 +444,9 @@ class RoomDetailFragment @Inject constructor(
             when (requestCode) {
                 REACTION_SELECT_REQUEST_CODE -> {
                     val eventId = data.getStringExtra(EmojiReactionPickerActivity.EXTRA_EVENT_ID)
-                                  ?: return
+                            ?: return
                     val reaction = data.getStringExtra(EmojiReactionPickerActivity.EXTRA_REACTION_RESULT)
-                                   ?: return
+                            ?: return
                     // TODO check if already reacted with that?
                     roomDetailViewModel.handle(RoomDetailAction.SendReaction(eventId, reaction))
                 }
@@ -471,7 +470,8 @@ class RoomDetailFragment @Inject constructor(
             it.dispatchTo(stateRestorer)
             it.dispatchTo(scrollOnNewMessageCallback)
             it.dispatchTo(scrollOnHighlightedEventCallback)
-            checkJumpToUnreadBanner()
+            updateJumpToReadMarkerViewVisibility()
+            updateJumpToBottomViewVisibility()
         }
         recyclerView.adapter = timelineEventController.adapter
 
@@ -517,18 +517,23 @@ class RoomDetailFragment @Inject constructor(
         }
     }
 
-    private fun checkJumpToUnreadBanner() = jumpToReadMarkerView.post {
+    private fun updateJumpToReadMarkerViewVisibility() = jumpToReadMarkerView.post {
         withState(roomDetailViewModel) {
             val showJumpToUnreadBanner = when (it.unreadState) {
                 UnreadState.Unknown,
-                UnreadState.HasNoUnread  -> false
-                is UnreadState.HasUnread -> {
-                    val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
-                    val positionOfReadMarker = timelineEventController.getPositionOfReadMarker()
-                    if (positionOfReadMarker == null) {
-                        it.timeline?.isLive == true && lastVisibleItem > 0
+                UnreadState.HasNoUnread            -> false
+                is UnreadState.ReadMarkerNotLoaded -> true
+                is UnreadState.HasUnread           -> {
+                    if (it.canShowJumpToReadMarker) {
+                        val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
+                        val positionOfReadMarker = timelineEventController.getPositionOfReadMarker()
+                        if (positionOfReadMarker == null) {
+                            false
+                        } else {
+                            positionOfReadMarker > lastVisibleItem
+                        }
                     } else {
-                        positionOfReadMarker > lastVisibleItem
+                        false
                     }
                 }
             }
@@ -1023,12 +1028,8 @@ class RoomDetailFragment @Inject constructor(
     }
 
     override fun onReadMarkerVisible() {
-        checkJumpToUnreadBanner()
+        updateJumpToReadMarkerViewVisibility()
         roomDetailViewModel.handle(RoomDetailAction.EnterTrackingUnreadMessagesState)
-    }
-
-    override fun onReadMarkerInvisible() {
-        checkJumpToUnreadBanner()
     }
 
     // AutocompleteUserPresenter.Callback
@@ -1170,7 +1171,7 @@ class RoomDetailFragment @Inject constructor(
                 if (composerLayout.composerEditText.text.isNullOrBlank()) {
                     composerLayout.composerEditText.append(Command.EMOTE.command + " ")
                     composerLayout.composerEditText.setSelection(composerLayout.composerEditText.text?.length
-                                                                 ?: 0)
+                            ?: 0)
 //                    vibrate = true
                 }
             } else {
@@ -1225,8 +1226,12 @@ class RoomDetailFragment @Inject constructor(
     // JumpToReadMarkerView.Callback
 
     override fun onJumpToReadMarkerClicked() = withState(roomDetailViewModel) {
+        jumpToReadMarkerView.isVisible = false
         if (it.unreadState is UnreadState.HasUnread) {
-            roomDetailViewModel.handle(RoomDetailAction.NavigateToEvent(it.unreadState.eventId, false))
+            roomDetailViewModel.handle(RoomDetailAction.NavigateToEvent(it.unreadState.firstUnreadEventId, false))
+        }
+        if (it.unreadState is UnreadState.ReadMarkerNotLoaded) {
+            roomDetailViewModel.handle(RoomDetailAction.NavigateToEvent(it.unreadState.readMarkerId, false))
         }
     }
 
