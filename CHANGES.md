@@ -5,7 +5,7 @@ Features ✨:
  -
 
 Improvements 🙌:
- -
+ - Rework the read marker to make it more usable
 
 Other changes:
  -
